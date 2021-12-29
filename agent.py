@@ -1,5 +1,6 @@
 import numpy as np
 from collections import Counter
+from game_creator import calculateMatrixGame
 from opponent import Opponent
 from particle import Particle
 from math import sqrt
@@ -19,14 +20,66 @@ class Agent:
 
         #Creating the lookup table. We use frequencies instead of probabilities and calculate probabilities when necessary 
         # TODO Not sure how to do this
+        self.errorLevels = errorLevels
         self.probabilityBins = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8 ,0.9,1])
         self.cooperationBins = np.linspace(-0.9, 1, num=20)
-        self.lookupTable = np.ones((len(self.probabilityBins)+1,len(self.cooperationBins)+1,len(errorLevels)))
+        self.lookupTable = self._generateLookupTable()
+        # np.ones((len(self.probabilityBins)+1,len(self.cooperationBins)+1,len(errorLevels)))
 
         #The particles used
         self.particles = [Particle(np.random.uniform(), np.random.uniform(), np.random.randint(low=0, high=self.gameSize-1)) for _ in range(0, numberOfParticles)]
 
         print("Initialized")
+
+    def _generateLookupTable(self):
+        # We populated a lookup table by creating a large number of games, true attitude/belief pairs, 
+        # and estimated attitude/belief pairs, and observing the frequency with which moves with various predicted probabilities 
+        # were observed
+        table = np.zeros((len(self.probabilityBins)+1,len(self.cooperationBins)+1,len(self.errorLevels) +1))
+        for _ in range(0,1000):
+            #Generate game
+            (self.agentPayoffMatrix, self.opponentPayoffMatrix) = calculateMatrixGame(self.gameSize)
+            # Generate true attitude and belief
+            oppAttitudeTrue = np.random.uniform()
+            oppBeliefTrue = np.random.uniform()
+            # Generate estimated attitude belief
+            oppAttitudeEstimated = np.random.uniform()
+            oppBeliefEstimated = np.random.uniform()
+
+            # Generate opponent nash
+            oppNash = np.random.randint(0, self.gameSize)
+
+            # Generate agent attitude
+            agentAttitude = np.random.uniform()
+
+            # Calculate cooperation level and error level
+            # Should I calculate estimated or true cooperation level?
+            coop = (oppAttitudeEstimated + oppBeliefEstimated)/(sqrt((oppAttitudeEstimated**2)+1)*sqrt((oppBeliefEstimated**2) + 1))
+            cooperationDigitized = np.digitize([coop], self.cooperationBins)[0]
+
+            err = sqrt((oppAttitudeTrue-oppAttitudeEstimated)**2 + (oppBeliefTrue-oppBeliefEstimated)**2)
+            errorDigitized = np.digitize([err], self.errorLevels)[0]
+
+
+            move = np.random.randint(0, self.gameSize)
+
+            print("Gamesize:", self.gameSize)
+            (_, nashOpp) = self._calculateNashEqOfModifiedGame(agentAttitude,  oppAttitudeEstimated, oppNash)
+            print("Nash length: ", len(nashOpp))
+            print("Nash: ", nashOpp)
+            probability = nashOpp[move]
+
+            probabilityDigitized = np.digitize([probability], self.probabilityBins)[0]
+
+            table[probabilityDigitized, cooperationDigitized, errorDigitized] += 1
+            # Observe a move
+            # How should I calculate this move? Just select one randomly? 
+            # Further, to calculate the probabilities for different moves I need to generate an attitude for the agent 
+            # and a nash parameter for the opponent. 
+        print(table)
+        return table    
+
+                
     #------------------------------------------------2. Observe Game--------------------------------------------------------
     #Observe a new game
     def observeGame(self, agentPayoffMatrix, opponentPayoffMatrix):
@@ -83,13 +136,6 @@ class Agent:
     # Observe opponent action and update model
     def learn(self, opponentAction):
 
-        # TODO Should the lookup table be updated here?
-        # From paper: 
-        # We populated a lookup table by creating a large number of games, true attitude/belief 
-        # pairs, and estimated attitude/belief pairs, and observing the frequency with which moves with various 
-        # predicted probabilities were observed
-
-
         #The error estimate is the euclidian between the true attitude and belief of opponent and the
         #estimated attitude and belief.
         err = self._updateErrorEstimate(opponentAction)
@@ -109,18 +155,16 @@ class Agent:
         
         print("Opponent chosen action:", opponentAction, "Our estimated probabilities:", nashEqOpponent)
     
-        # TODO Unsure about how to update and use the lookup table. 
+        # TODO Unsure about how to use the lookup table. 
         j = nashEqOpponent[opponentAction]
         jDigitized = np.digitize([j], self.probabilityBins)[0]
-        k = (self.attitudeAgent + self.opponent.attitude)/(sqrt((self.attitudeAgent**2) + 1)* sqrt((self.opponent.attitude**2)+1))
+        k = (self.opponent.attitude + self.opponent.belief)/(sqrt(sqrt((self.opponent.attitude**2)+1)*(self.opponent.belief**2) + 1))
         kDigitized = np.digitize([k], self.cooperationBins)[0]
 
         #print("j-value", j,  "jDigitized", jDigitized, "probability levels", self.probabilityBins)
         #print("k-value", k,  "kDigitized", kDigitized, "cooperation levels", self.cooperationBins)
         #print("Current error level", np.argmax(self.distributionOverErrorLevels), "All error levels:", self.distributionOverErrorLevels)
 
-        #Currently updating lookup table here, not sure whether this is the right way or place to do it.
-        self.lookupTable[jDigitized, kDigitized, np.argmax(self.distributionOverErrorLevels)] += 1
 
         #updating error level distribution
         for level in range(0,len(self.errorLevels)):
