@@ -7,12 +7,13 @@ class StationaryOpponent:
         self.nash = nash
 
     def pickMove(self, agentMatrix, myMatrix):
-        self.opponentPayoffMatrix = agentMatrix
-        self.agentPayoffMatrix = myMatrix
+        self.agentPayoffMatrix = agentMatrix
+        self.opponentPayoffMatrix = myMatrix
         #Choose move from nash equilibrium of modified game
-        (myNashEq, _) = self._calculateNashEqOfModifiedGame(self.attitude, self.belief, self.nash)
+        (_, myNashEq) = self._calculateNashEqOfModifiedGame(self.belief, self.attitude, self.nash)
         print("Opponent real nash eq:", myNashEq)
-        return np.random.choice(np.arange(len(myNashEq)), 1, p=myNashEq)
+        move = np.random.choice(np.arange(len(myNashEq)), 1, p=myNashEq)
+        return move, myNashEq[move]
 
 
     # Creates a modified game according to equation given in paper

@@ -25,13 +25,15 @@ class Agent:
 
       
         self.errorLevels = errorLevels
-        self.probabilityBins = np.array([0, .066, .13, .2, .26, .33, .4, .46, .53, .6, .66, .73, .8, .86, .93, 1])
-        self.cooperationBins = np.linspace(-0.9, 0.9, num=10)
+        self.probabilityBins = np.array([0.1, .2, .4, .6, .8, 0.9
+])
+        self.cooperationBins = np.linspace(-0.9, 0.9, num=5)
         self.lookupTable = self._generateLookupTable()
     
 
         #The particles used
         self.particles = [Particle(np.random.normal(), np.random.normal(), np.random.randint(low=0, high=self.gameSize-1)) for _ in range(0, numberOfParticles)]
+        #self.particles.append(Particle(0.5,0.5,1))
 
         print("Initialized")
 
@@ -39,16 +41,16 @@ class Agent:
         # We populated a lookup table by creating a large number of games, true attitude/belief pairs, 
         # and estimated attitude/belief pairs, and observing the frequency with which moves with various predicted probabilities 
         # were observed.
-        table = np.ones((len(self.cooperationBins)+1,len(self.errorLevels) +1, len(self.probabilityBins)+1))
+        table = np.ones((len(self.cooperationBins)+1,len(self.errorLevels)+1, len(self.probabilityBins)+1))
         for _ in range(100000):
             #Generate game
             (self.agentPayoffMatrix, self.opponentPayoffMatrix) = calculateMatrixGame(self.gameSize)
             # Generate true attitude and belief
-            oppAttitudeTrue = np.random.uniform(-1,1)
-            oppBeliefTrue = np.random.uniform(-1,1)
+            oppAttitudeTrue = np.random.normal()
+            oppBeliefTrue = np.random.normal()
             # Generate estimated attitude belief
-            oppAttitudeEstimated = np.random.uniform(-1,1)
-            oppBeliefEstimated = np.random.uniform(-1,1)
+            oppAttitudeEstimated = np.random.normal()
+            oppBeliefEstimated = np.random.normal()
 
             # Generate opponent nash
             oppNash = np.random.randint(0, self.gameSize)
@@ -57,10 +59,11 @@ class Agent:
             # Calculate cooperation level and error level
             # Should I calculate estimated or true cooperation level?
             coop = (oppAttitudeEstimated + oppBeliefEstimated)/(sqrt((oppAttitudeEstimated**2)+1)*sqrt((oppBeliefEstimated**2) + 1))
-            cooperationDigitized = np.digitize([coop], self.cooperationBins)[0]
+            cooperationDigitized = self._getDigitizedValue(coop,self.cooperationBins)
+            
 
             err = sqrt((oppAttitudeTrue-oppAttitudeEstimated)**2 + (oppBeliefTrue-oppBeliefEstimated)**2)
-            errorDigitized = np.digitize([err], self.errorLevels)[0]
+            errorDigitized = self._getDigitizedValue(err, self.errorLevels)
 
 
             #Observe a move
@@ -70,7 +73,8 @@ class Agent:
             #Estimate a probability for the move
             (_, nashOpp) = self._calculateNashEqOfModifiedGame(oppBeliefEstimated,  oppAttitudeEstimated, oppNash)
             probability = nashOpp[move]
-            probabilityDigitized = np.digitize([probability], self.probabilityBins)[0]
+
+            probabilityDigitized = self._getDigitizedValue(probability, self.probabilityBins)
 
             table[cooperationDigitized, errorDigitized, probabilityDigitized] += 1
             
@@ -78,8 +82,13 @@ class Agent:
         print(table.shape)
         for i,errorLevels in enumerate(table):
             for j,probabilities in enumerate(errorLevels):
-                table[i,j] = probabilities / probabilities.sum(axis=0)
+                table[i,j] = probabilities / probabilities.sum()
         print(table)
+
+        print("High coop, low err. Should give high prob", table[5,0]) 
+        print("High coop, high err. Should give both high and low prob", table[5,6]) 
+        print("Low coop, low err. Should give low prob", table[0,0]) 
+        print("Low coop, high err. Should give very low probs", table[0,6]) 
         return table    
 
                 
@@ -151,7 +160,7 @@ class Agent:
 
         #The error estimate is the euclidian between the true attitude and belief of opponent and the
         #estimated attitude and belief.
-        self.err = self._updateErrorEstimate(opponentAction)
+        (probOfOpponentAction,self.err) = self._updateErrorEstimate(opponentAction)
         print("The new estimated error is", self.err)
 
         #Resample the particles to get better estimates
@@ -159,6 +168,8 @@ class Agent:
 
         #Perturb particles to avoid a concentration of all the probability mass into a single particle
         self._perturbParticles(self.err)
+
+        return probOfOpponentAction
     
     #Update the error estimate.
     #Returns the new error estimate
@@ -167,28 +178,29 @@ class Agent:
         (nashEqAgent, nashEqOpponent) = self._calculateNashEqOfModifiedGame(self.attitudeAgent, self.opponent.attitude, self.opponent.nashParameter)
         
         print("Opponent chosen action:", opponentAction, "Our estimated probabilities:", nashEqOpponent)
-    
- 
-        j = nashEqOpponent[opponentAction]
-        jDigitized = np.digitize([j], self.probabilityBins)[0]
-        k = (self.opponent.attitude + self.opponent.belief)/(sqrt((self.opponent.attitude**2)+1)*sqrt((self.opponent.belief**2) + 1))
-        kDigitized = np.digitize([k], self.cooperationBins)[0]
 
-        #print("j-value", j,  "jDigitized", jDigitized, "probability levels", self.probabilityBins)
-        #print("k-value", k,  "kDigitized", kDigitized, "cooperation levels", self.cooperationBins)
-        #print("Current error level", np.argmax(self.distributionOverErrorLevels), "All error levels:", self.distributionOverErrorLevels)
         
 
+        j = nashEqOpponent[opponentAction]
+
+        jDigitized = self._getDigitizedValue(j,self.probabilityBins)
+        k = (self.opponent.attitude + self.opponent.belief)/(sqrt((self.opponent.attitude**2)+1)*sqrt((self.opponent.belief**2) + 1))
+        kDigitized = self._getDigitizedValue(k,self.cooperationBins)
+        
+        
         #updating error level distribution
         for level in range(0,len(self.errorLevels)):
+            
             lookupValue  = self.lookupTable[kDigitized,level,jDigitized]
+        
+            #print("Error level:", level, "Lookup:", lookupValue)
             self.distributionOverErrorLevels[level] *= lookupValue
         
         #Normalizing error level distribution
         self.distributionOverErrorLevels /= self.distributionOverErrorLevels.sum()
 
         #Calculating error estimation
-        return sum([self.errorLevels[level]*self.distributionOverErrorLevels[level] for level in range(0, len(self.errorLevels))])
+        return j,sum([self.errorLevels[level]*self.distributionOverErrorLevels[level] for level in range(0, len(self.errorLevels))])
         
     # Resamples the particles. 
     # Each particle is given a weight before resampling. The weight is equal to the probability the particle assigned
@@ -210,7 +222,9 @@ class Agent:
             weights = weights / weightsSum
       
         #Choose best particles
-        self.particles = np.random.choice(self.particles, self.numberOfParticles, p=weights)
+        newParticles = np.random.choice(self.particles, self.numberOfParticles, p=weights)
+        self.particles = newParticles
+
 
     #Perturbs the particles slightly
     def _perturbParticles(self, err):
@@ -222,7 +236,12 @@ class Agent:
             nash = particle.pNash
             if(newNashMethod):
                 nash = np.random.randint(0, self.gameSize-1)
-            self.particles[i] = Particle(att,bel,nash)    
+            self.particles[i] = Particle(att,bel,nash)   
+
+    def _getDigitizedValue(self, value, bins):
+        return np.digitize([value], bins, right=True)[0] 
+    def _normalizeData(self, data):
+        return (data - np.min(data)) / (np.max(data) - np.min(data))
           
 
 

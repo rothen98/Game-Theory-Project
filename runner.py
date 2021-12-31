@@ -17,20 +17,24 @@ def run():
     allRewards = []
     allEstimatedErrors = []
     allErrors = []
-    for _ in range(10):
-        agent: Agent = Agent(200, 0.1, np.array([0, .066, .13, .2, .26, .33, .4, .46, .53, .6, .66, .73, .8, .86, .93, 1]), gameSize)
+    allEstimated_prob_difference = []
+    timesteps = 1000
+    for _ in range(100):
+        agent: Agent = Agent(200, 0.1, np.array([0.1, .2, .4, .6, .8, 0.9]), gameSize)
         opponent = StationaryOpponent(0.5, 0.5, 1)
         estimatedErrors = []
         errors = []
         rewards = []
-        for _ in range(1000):
+        estimated_prob_difference = []
+        
+        for _ in range(timesteps):
             (agentPayoff, opponentPayoff) = calculateMatrixGame(gameSize)
             agent.observeGame(agentPayoff, opponentPayoff)
             act = agent.pickMove()
-            oppAct = opponent.pickMove(agentPayoff, opponentPayoff)
+            (oppAct, withProb) = opponent.pickMove(agentPayoff, opponentPayoff)
             rewards.append(agentPayoff[act,oppAct])
-            agent.learn(oppAct)
-
+            probOfOpponentAction = agent.learn(oppAct)
+            estimated_prob_difference.append(1-(abs(withProb-probOfOpponentAction)))
             estimatedErrors.append(agent.err)
             errors.append(calculateRealError(opponent.attitude, agent.opponent.attitude, opponent.belief, agent.opponent.belief))
             
@@ -39,11 +43,15 @@ def run():
         allRewards.append(rewards)
         allEstimatedErrors.append(estimatedErrors)
         allErrors.append(errors)
+        allEstimated_prob_difference.append(estimated_prob_difference)
 
     import matplotlib.pyplot as plt
-    plt.plot(np.mean(allRewards, axis=0), label="Reward")
+    #plt.plot(np.mean(allRewards, axis=0), label="Reward")
     plt.plot(np.mean(allEstimatedErrors, axis=0), label="Estimated Error")
     plt.plot(np.mean(allErrors, axis=0), label="True Error")
+    plt.scatter(y=np.mean(allEstimated_prob_difference,axis=0), x=list(range(timesteps)), label="Predictive Accuracy", s=1)
+
+        
     plt.ylabel('some numbers')
     plt.legend()
     plt.show()
