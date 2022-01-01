@@ -20,12 +20,11 @@ class Agent:
         self.errorLevels = errorLevels
         self.gameSize = gamesize
 
-        #Errro distribution is uniform?
         self.distributionOverErrorLevels = np.array([1.0/len(errorLevels)]*len(errorLevels))
 
       
         self.errorLevels = errorLevels
-        self.probabilityBins = np.array([0.1, .2, .4, .6, .8, 0.9
+        self.probabilityBins = np.array([0.1, .2, .3, .4, .5, .6, .7, .8, 0.9
 ])
         self.cooperationBins = np.linspace(-0.9, 0.9, num=5)
         self.lookupTable = self._generateLookupTable()
@@ -33,9 +32,7 @@ class Agent:
 
         #The particles used
         self.particles = [Particle(np.random.normal(), np.random.normal(), np.random.randint(low=0, high=self.gameSize-1)) for _ in range(0, numberOfParticles)]
-        #self.particles.append(Particle(0.5,0.5,1))
-
-        print("Initialized")
+        
 
     def _generateLookupTable(self):
         # We populated a lookup table by creating a large number of games, true attitude/belief pairs, 
@@ -78,17 +75,12 @@ class Agent:
 
             table[cooperationDigitized, errorDigitized, probabilityDigitized] += 1
             
-        print(table)
-        print(table.shape)
+        
         for i,errorLevels in enumerate(table):
             for j,probabilities in enumerate(errorLevels):
                 table[i,j] = probabilities / probabilities.sum()
-        print(table)
+        
 
-        print("High coop, low err. Should give high prob", table[5,0]) 
-        print("High coop, high err. Should give both high and low prob", table[5,6]) 
-        print("Low coop, low err. Should give low prob", table[0,0]) 
-        print("Low coop, high err. Should give very low probs", table[0,6]) 
         return table    
 
                 
@@ -97,7 +89,7 @@ class Agent:
     def observeGame(self, agentPayoffMatrix, opponentPayoffMatrix):
         self.agentPayoffMatrix = agentPayoffMatrix 
         self.opponentPayoffMatrix = opponentPayoffMatrix
-        print("------------------- NEW GAME OBSERVED -----------------------------")
+        #print("------------------- NEW GAME OBSERVED -----------------------------")
 
 
     #------------------------------------------------3. Pick Move----------------------------------------------------------
@@ -105,48 +97,32 @@ class Agent:
     def pickMove(self):
         #Estimate opponent attitude and belief and nash eq method
         self.opponent = self._estimateOpponent()
-        print("Estimated opponent:", self.opponent.readable())
         #Update my attitude
         self.attitudeAgent = min(self.opponent.attitude + self.reciprocationLevel, 1)
-        print("Updated my attitude:", self.attitudeAgent)
         #Choose move from nash equilibrium of modified game
         (nashEqAgent, nashEqOpponent) = self._calculateNashEqOfModifiedGame(self.attitudeAgent, self.opponent.attitude, self.opponent.nashParameter)
         
 
         move = np.random.choice(np.arange(len(nashEqAgent)), 1, p=nashEqAgent)
-        print("My nash equilibrium:", nashEqAgent,"Chosen move is:",move)
         return move
 
     # Estimates the opponents attitude, belief and nash eq parameter
     def _estimateOpponent(self):
         opponentAttitude = sum([p.pAtt for p in self.particles]) / self.numberOfParticles
         opponentBelief = sum([p.pBel for p in self.particles]) / self.numberOfParticles
-        c = Counter([p.pNash for p in self.particles])
-        m = c.most_common(1)
-        opponentNash = m[0][0]
+        opponentNash = Counter([p.pNash for p in self.particles]).most_common(1)[0][0]
         return Opponent(opponentAttitude, opponentBelief, opponentNash)
 
     # Creates a modified game according to equation given in paper
     def _createModifiedGame(self, attitudeAgent, attitudeOpponent):
         agentModifiedPayOffMatrix = self.agentPayoffMatrix + attitudeAgent*self.opponentPayoffMatrix
         opponentModifiedPayOffMatrix = self.opponentPayoffMatrix + attitudeOpponent*self.agentPayoffMatrix
-
-        #print("Modified agent payoff", agentModifiedPayOffMatrix)
-        #print("Modified opponent payoff", opponentModifiedPayOffMatrix)
-        #return nash.Game(agentModifiedPayOffMatrix, opponentModifiedPayOffMatrix)
         return (agentModifiedPayOffMatrix, opponentModifiedPayOffMatrix)
 
     # Calculates the nash equilibrium of the modified game created with the given parameters
     def _calculateNashEqOfModifiedGame(self, attitudeAgent, attitudeOpponent, nashParameter):
-        #nashEquilibrias = list(self._createModifiedGame(attitudeAgent, attitudeOpponent).support_enumeration())
-        #if(nashEquilibrias.length < self.gameSize):
-        #    return nashEquilibrias[0]
-        #else: return nashEquilibrias[nashParameter] 
-        # q = NormalFormGame((Player(A), Player(B)))
-
+        
         (agentModified, opponentModified) = self._createModifiedGame(attitudeAgent, attitudeOpponent)
-        #(nashOne, nashTwo) = perform_lemke_howson(agentModified,opponentModified, nashParameter)
-
         (nashOne, nashTwo) = lemke_howson(NormalFormGame((Player(agentModified),Player(opponentModified))), nashParameter)
 
         return (nashOne,nashTwo)    
@@ -161,7 +137,7 @@ class Agent:
         #The error estimate is the euclidian between the true attitude and belief of opponent and the
         #estimated attitude and belief.
         (probOfOpponentAction,self.err) = self._updateErrorEstimate(opponentAction)
-        print("The new estimated error is", self.err)
+        #print("The new estimated error is", self.err)
 
         #Resample the particles to get better estimates
         self._resampleParticles(opponentAction)
@@ -177,10 +153,6 @@ class Agent:
         self.attitudeAgent = self.opponent.belief
         (nashEqAgent, nashEqOpponent) = self._calculateNashEqOfModifiedGame(self.attitudeAgent, self.opponent.attitude, self.opponent.nashParameter)
         
-        print("Opponent chosen action:", opponentAction, "Our estimated probabilities:", nashEqOpponent)
-
-        
-
         j = nashEqOpponent[opponentAction]
 
         jDigitized = self._getDigitizedValue(j,self.probabilityBins)
@@ -213,7 +185,6 @@ class Agent:
             weights[index] =  nashEqOpponent[opponentAction]
 
         weightsSum = weights.sum()
-        print("Weight sum", weightsSum)
         if(weightsSum == 0):
             # If all weights are zero, set equal probability for all particles
             weights = np.ones(len(weights))/len(weights)

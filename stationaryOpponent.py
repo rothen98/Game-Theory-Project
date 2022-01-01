@@ -11,7 +11,7 @@ class StationaryOpponent:
         self.opponentPayoffMatrix = myMatrix
         #Choose move from nash equilibrium of modified game
         (_, myNashEq) = self._calculateNashEqOfModifiedGame(self.belief, self.attitude, self.nash)
-        print("Opponent real nash eq:", myNashEq)
+        #print("Opponent real nash eq:", myNashEq)
         move = np.random.choice(np.arange(len(myNashEq)), 1, p=myNashEq)
         return move, myNashEq[move]
 
