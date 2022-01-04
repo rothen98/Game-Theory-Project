@@ -54,9 +54,7 @@ class Agent:
             oppNash = np.random.randint(0, self.gameSize)
 
             # Calculate cooperation level and error level
-            # Should I calculate estimated or true cooperation level?
-            # Change opponent's attitude and belief from estimate to true
-            coop = (oppAttitudeTrue + oppBeliefTrue) / (sqrt(oppAttitudeTrue**2 + 1) * sqrt(oppBeliefTrue**2 + 1))
+            coop = (oppAttitudeEstimated + oppBeliefEstimated) / (sqrt(oppAttitudeEstimated**2 + 1) * sqrt(oppBeliefEstimated**2 + 1))
             cooperationDigitized = self._getDigitizedValue(coop, self.cooperationBins)
 
             err = sqrt((oppAttitudeTrue - oppAttitudeEstimated)**2 + (oppBeliefTrue - oppBeliefEstimated)**2)
